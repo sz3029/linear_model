@@ -1,0 +1,118 @@
+---
+xtitle: "linear_model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(p8105.datasets)
+
+set.seed(1)
+```
+
+## Data NYC
+
+```{r }
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb %>% 
+  mutate(stars = review_scores_location / 2) %>% 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) %>% 
+  filter(borough != "Staten Island") %>% 
+  select(price, stars, borough, neighborhood, room_type)
+```
+
+## fit
+
+```{r }
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+```
+
+## Let's look at this...
+
+```{r}
+summary(fit)
+summary(fit)$coeff
+# data frame
+fit %>% broom::tidy()
+```
+
+if you want to do sth cool
+
+```{r}
+fit %>%
+  broom::tidy() %>%
+  mutate(term = str_replace(term, "borough", "Borough: ")) %>%
+  select(term, estimate, p.value)
+```
+
+## Diagnostic
+
+```{r}
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = borough, y = resid)) + geom_violin()
+```
+
+
+```{r}
+modelr::add_residuals(nyc_airbnb, fit) %>%
+  ggplot(aes(x = stars, y = resid)) +
+  geom_point()
+
+modelr::add_residuals(nyc_airbnb, fit) %>%
+  ggplot(aes(x = resid)) +
+  geom_density() +
+  xlim(-200, 200)
+```
+
+## Hypothesis testing
+
+```{r}
+fit_null = lm(price ~ stars + borough, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough + room_type, data = nyc_airbnb)
+
+anova(fit_null, fit_alt) %>% 
+  broom::tidy()
+```
+
+## Interactions? Nesting?
+
+```{r}
+fit = lm(price ~ stars + borough + room_type + borough, data = nyc_airbnb)
+broom::tidy(fit) 
+```
+
+Let's try nesting
+
+```{r}
+nyc_airbnb %>%
+  relocate(borough) %>%
+  nest(data = price:room_type) %>%
+  mutate(
+    lm_fits = map(.x = data, ~lm(price ~ stars + room_type, data = .x)),
+    lm_results = map(lm_fits, broom::tidy)
+  ) %>%
+  select(borough, lm_results) %>%
+  unnest(lm_results) %>%
+  filter(term == "stars")
+```
+
+look ar neighborhood in Manhattan 
+
+```{r}
+nyc_airbnb %>%
+  filter(borough == "Manhattan") %>%
+  select(-borough) %>%
+  relocate(neighborhood) %>%
+  nest(data = price:room_type) %>%
+  mutate(
+    lm_fits = map(.x = data, ~lm(price ~ stars + room_type, data = .x)),
+    lm_results = map(lm_fits, broom::tidy)
+  )
+```
+
